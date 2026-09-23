@@ -3,8 +3,8 @@ package com.ms_usuario.usuario.service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
-import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminInitiateAuthRequest;
-import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminInitiateAuthResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.InitiateAuthRequest;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.InitiateAuthResponse;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AuthFlowType;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AuthenticationResultType;
 import com.ms_usuario.usuario.entities.dto.AuthResponseDto;
@@ -20,9 +20,6 @@ public class AuthService {
     @Value("${aws.cognito.app-client-id}")
     private String clientId;
 
-    @Value("${aws.cognito.user-pool-id}")
-    private String userPoolId;
-
     public AuthService(CognitoIdentityProviderClient cognitoClient) {
         this.cognitoClient = cognitoClient;
     }
@@ -33,14 +30,13 @@ public class AuthService {
             "PASSWORD", request.password()
         );
 
-        AdminInitiateAuthRequest authRequest = AdminInitiateAuthRequest.builder()
-            .authFlow(AuthFlowType.ADMIN_NO_SRP_AUTH)
-            .userPoolId(userPoolId)
+        InitiateAuthRequest authRequest = InitiateAuthRequest.builder()
+            .authFlow(AuthFlowType.USER_PASSWORD_AUTH)
             .clientId(clientId)
             .authParameters(authParams)
             .build();
 
-        AdminInitiateAuthResponse response = cognitoClient.adminInitiateAuth(authRequest);
+        InitiateAuthResponse response = cognitoClient.initiateAuth(authRequest);
         AuthenticationResultType result = response.authenticationResult();
 
         return new AuthResponseDto(
