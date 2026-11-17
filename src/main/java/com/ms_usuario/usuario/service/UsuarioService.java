@@ -10,12 +10,11 @@ import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityPr
 import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
 import java.util.List;
 
-@Service 
+@Service
 public class UsuarioService implements IUsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final CognitoIdentityProviderClient cognitoClient;
-    
 
     @Value("${aws.cognito.user-pool-id}")
     private String userPoolId;
@@ -28,6 +27,11 @@ public class UsuarioService implements IUsuarioService {
     @Override
     @Transactional
     public Usuario crearUsuario(UsuarioDto usuariodto) {
+        String rolAsignado = (usuariodto.getRol() != null && !usuariodto.getRol().isBlank())
+                ? usuariodto.getRol()
+                : "ROLE_USER";
+
+        // 1. Crear usuario en AWS Cognito sin enviar correo con clave temporal
         AdminCreateUserRequest cognitoRequest = AdminCreateUserRequest.builder()
                 .userPoolId(userPoolId)
                 .username(usuariodto.getEmail())
@@ -35,35 +39,47 @@ public class UsuarioService implements IUsuarioService {
                         AttributeType.builder().name("email").value(usuariodto.getEmail()).build(),
                         AttributeType.builder().name("email_verified").value("true").build()
                 )
+                .messageAction(MessageActionType.SUPPRESS)
                 .desiredDeliveryMediums(DeliveryMediumType.EMAIL)
                 .build();
 
         AdminCreateUserResponse cognitoResponse = cognitoClient.adminCreateUser(cognitoRequest);
         UserType cognitoUser = cognitoResponse.user();
 
+        // 2. Extraer el UUID 'sub' generado por Cognito
         String sub = cognitoUser.attributes().stream()
                 .filter(attr -> attr.name().equals("sub"))
                 .findFirst()
                 .map(AttributeType::value)
                 .orElseThrow(() -> new RuntimeException("No se pudo obtener el sub de Cognito"));
 
-        if (usuariodto.getRol() != null && !usuariodto.getRol().isEmpty()) {
-            AdminAddUserToGroupRequest groupRequest = AdminAddUserToGroupRequest.builder()
+        // 3. Fijar la contraseña del formulario como permanente para permitir login inmediato
+        if (usuariodto.getPassword() != null && !usuariodto.getPassword().isBlank()) {
+            AdminSetUserPasswordRequest passwordRequest = AdminSetUserPasswordRequest.builder()
                     .userPoolId(userPoolId)
                     .username(usuariodto.getEmail())
-                    .groupName(usuariodto.getRol())
+                    .password(usuariodto.getPassword())
+                    .permanent(true)
                     .build();
-            cognitoClient.adminAddUserToGroup(groupRequest);
+            cognitoClient.adminSetUserPassword(passwordRequest);
         }
 
-        Usuario nuevoUsuario = Usuario.builder()
-                .cognitoSub(sub)
-                .email(usuariodto.getEmail())
-                .rut(usuariodto.getRut())
-                .nombre(usuariodto.getNombre())
-                .apellido(usuariodto.getApellido())
-                .rol(usuariodto.getRol())
+        // 4. Asignar usuario al Grupo correspondiente en Cognito
+        AdminAddUserToGroupRequest groupRequest = AdminAddUserToGroupRequest.builder()
+                .userPoolId(userPoolId)
+                .username(usuariodto.getEmail())
+                .groupName(rolAsignado)
                 .build();
+        cognitoClient.adminAddUserToGroup(groupRequest);
+
+        // 5. Guardar la entidad en PostgreSQL vinculando el cognito_sub como @Id
+        Usuario nuevoUsuario = new Usuario();
+        nuevoUsuario.setCognitoSub(sub);
+        nuevoUsuario.setEmail(usuariodto.getEmail());
+        nuevoUsuario.setRut(usuariodto.getRut());
+        nuevoUsuario.setNombre(usuariodto.getNombre());
+        nuevoUsuario.setApellido(usuariodto.getApellido());
+        nuevoUsuario.setRol(rolAsignado);
 
         return usuarioRepository.save(nuevoUsuario);
     }

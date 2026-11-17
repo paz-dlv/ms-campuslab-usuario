@@ -7,6 +7,10 @@ public class UsuarioDto {
     private String nombre;
     private String apellido;
     private String rol;
+    private String password;
+
+    public UsuarioDto() {
+    }
 
     public UsuarioDto(String email, String rut, String nombre, String apellido, String rol) {
         this.email = email;
@@ -16,10 +20,15 @@ public class UsuarioDto {
         this.rol = rol;
     }
 
-    public UsuarioDto() {
-         
+    public UsuarioDto(String email, String rut, String nombre, String apellido, String rol, String password) {
+        this.email = email;
+        this.rut = rut;
+        this.nombre = nombre;
+        this.apellido = apellido;
+        this.rol = rol;
+        this.password = password;
     }
-    
+
     public String getEmail() {
         return email;
     }
@@ -58,5 +67,13 @@ public class UsuarioDto {
 
     public void setRol(String rol) {
         this.rol = rol;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 }
